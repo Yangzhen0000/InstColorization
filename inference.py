@@ -48,10 +48,11 @@ model = create_model(opt)
 # model.setup_to_test('coco_finetuned_mask_256')
 model.setup_to_test('coco_finetuned_mask_256_ffs')
 
-input_dir = args.test_img_dir
+input_dir = opt.test_img_dir
 image_list = [f for f in listdir(input_dir) if isfile(join(input_dir, f))]
 print('#Testing images = %d' % len(image_list))
 
+transforms = transforms.Compose([transforms.Resize((opt.fineSize, opt.fineSize), interpolation=2), transforms.ToTensor()])
 for image_path in tqdm(image_list, dynamic_ncols=True):
     img = cv2.imread(join(input_dir, image_path))
     lab_image = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
@@ -69,9 +70,7 @@ for image_path in tqdm(image_list, dynamic_ncols=True):
 
     # process full image
     img_list = []
-    transforms = transforms.Compose([transforms.Resize((opt.fineSize, opt.fineSize), interpolation=2),
-                                     transforms.ToTensor()])
-    pil_img = Image.open(image_path)
+    pil_img = Image.open(join(input_dir, image_path))
     if len(np.asarray(pil_img).shape) == 2:
         pil_img = np.stack([np.asarray(pil_img), np.asarray(pil_img), np.asarray(pil_img)], 2)
         pil_img = Image.fromarray(pil_img)
@@ -83,10 +82,10 @@ for image_path in tqdm(image_list, dynamic_ncols=True):
     box_info, box_info_2x, box_info_4x, box_info_8x = np.zeros((4, len(index_list), 6))
     for i in index_list:
         startx, starty, endx, endy = pred_bbox[i]
-        box_info[i] = np.array(get_box_info(pred_bbox[i], pil_img.size, args.fineSize))
-        box_info_2x[i] = np.array(get_box_info(pred_bbox[i], pil_img.size, args.fineSize // 2))
-        box_info_4x[i] = np.array(get_box_info(pred_bbox[i], pil_img.size, args.fineSize // 4))
-        box_info_8x[i] = np.array(get_box_info(pred_bbox[i], pil_img.size, args.fineSize // 8))
+        box_info[i] = np.array(get_box_info(pred_bbox[i], pil_img.size, opt.fineSize))
+        box_info_2x[i] = np.array(get_box_info(pred_bbox[i], pil_img.size, opt.fineSize // 2))
+        box_info_4x[i] = np.array(get_box_info(pred_bbox[i], pil_img.size, opt.fineSize // 4))
+        box_info_8x[i] = np.array(get_box_info(pred_bbox[i], pil_img.size, opt.fineSize // 8))
         cropped_img = transforms(pil_img.crop((startx, starty, endx, endy)))
         cropped_img_list.append(cropped_img)
 
@@ -114,6 +113,8 @@ for image_path in tqdm(image_list, dynamic_ncols=True):
         box_info_2x = output['box_info_2x']
         box_info_4x = output['box_info_4x']
         box_info_8x = output['box_info_8x']
+        output['cropped_img'] = output['cropped_img'].unsqueeze(0)
+        output['full_img'] = output['full_img'].unsqueeze(0)
         cropped_data = util.get_colorization_data(output['cropped_img'], opt, ab_thresh=0, p=opt.sample_p)
         full_img_data = util.get_colorization_data(output['full_img'], opt, ab_thresh=0, p=opt.sample_p)
         model.set_input(cropped_data)
@@ -123,5 +124,5 @@ for image_path in tqdm(image_list, dynamic_ncols=True):
         count_empty += 1
         full_img_data = util.get_colorization_data(output['full_img'], opt, ab_thresh=0, p=opt.sample_p)
         model.set_forward_without_box(full_img_data)
-    model.save_current_imgs(join(save_img_path, output['file_id'][0] + '.png'))
+    model.save_current_imgs(join(save_img_path, output['file_id'] + '.png'))
 print('{0} images without bounding boxes'.format(count_empty))
